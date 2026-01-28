@@ -182,5 +182,23 @@ window.WordCloudPoll = {
     copyToClipboard: copyToClipboardElement
 };
 
+// Show error message
+function showError(message) {
+    const el = document.getElementById('errorMessage');
+    if (el) {
+        el.textContent = message;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 5000);
+    }
+}
 
+// Show success message
+function showSuccess(message) {
+    const el = document.getElementById('successMessage');
+    if (el) {
+        el.textContent = message;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 3000);
+    }
+}
 

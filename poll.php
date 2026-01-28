@@ -133,328 +133,352 @@ if (!$poll):
         </div>
     </div>
     
+   
+   
+   
     <script>
-    const currentPollId = "<?php echo htmlspecialchars($poll_id, ENT_QUOTES); ?>";
-    const isAdmin = <?php echo $is_admin ? 'true' : 'false'; ?>;
-    const adminToken = "<?php echo $is_admin ? htmlspecialchars($token, ENT_QUOTES) : ''; ?>";
+
+const currentPollId = "<?php echo htmlspecialchars($poll_id, ENT_QUOTES); ?>";
+const isAdmin = <?php echo $is_admin ? 'true' : 'false'; ?>;
+const adminToken = "<?php echo $is_admin ? htmlspecialchars($token, ENT_QUOTES) : ''; ?>";
+
+let wordsData = [];
+let currentSort = 'votes';
+
+// Initialize poll
+document.addEventListener('DOMContentLoaded', function() {
+    fetchWords();
+    setupEventListeners();
     
-    let wordsData = [];
-    let refreshInterval;
-    let currentSort = 'votes';
-    
-    // Initialize poll
-    document.addEventListener('DOMContentLoaded', function() {
-        fetchWords();
-        startAutoRefresh();
-        setupEventListeners();
-        
-        if (isAdmin) {
-            loadAdminStats();
-        }
-    });
-    
-    // Setup event listeners
-    function setupEventListeners() {
-        const wordInput = document.getElementById('wordInput');
-        const submitBtn = document.getElementById('submitWordBtn');
-        
-        if (wordInput) {
-            wordInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    submitWord();
-                }
-            });
-            
-            if (submitBtn) {
-                submitBtn.addEventListener('click', submitWord);
-            }
-        }
-        
-        // Sort buttons
-        document.querySelectorAll('.sort-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                currentSort = this.dataset.sort;
-                renderWordList();
-            });
-        });
+    if (isAdmin) {
+        loadAdminStats();
     }
+});
+
+// Setup event listeners
+function setupEventListeners() {
+    const wordInput = document.getElementById('wordInput');
+    const submitBtn = document.getElementById('submitWordBtn');
     
-    // Fetch words from API
-    async function fetchWords() {
-        try {
-            const response = await fetch(`api/get-words.php?poll_id=${currentPollId}`);
-            const result = await response.json();
-            
-            if (result.success) {
-                wordsData = result.words || [];
-                updateWordCount();
-                renderWordCloud();
-                renderWordList();
-                
-                if (isAdmin) {
-                    updateAdminStats();
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching words:', error);
-        }
-    }
-    
-    // Submit word
-    async function submitWord() {
-        const wordInput = document.getElementById('wordInput');
-        const word = wordInput.value.trim().toLowerCase();
-        
-        if (!word) {
-            showError('Please enter a word');
-            return;
-        }
-        
-        if (word.length > 50) {
-            showError('Word is too long (max 50 characters)');
-            return;
-        }
-        
-        if (!/^[a-zA-Z0-9\s\-]+$/.test(word)) {
-            showError('Only letters, numbers, spaces and hyphens allowed');
-            return;
-        }
-        
-        try {
-            const formData = new FormData();
-            formData.append('poll_id', currentPollId);
-            formData.append('word', word);
-            
-            const response = await fetch('api/submit-word.php', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showSuccess(result.message || 'Word submitted!');
-                wordInput.value = '';
-                await fetchWords();
-            } else {
-                showError(result.message || 'Failed to submit word');
-            }
-        } catch (error) {
-            showError('Network error. Please try again.');
-        }
-    }
-    
-    // Render word cloud
-    function renderWordCloud() {
-        const container = document.getElementById('wordcloud-svg');
-        if (!container) return;
-        
-        container.innerHTML = '';
-        
-        if (wordsData.length === 0) {
-            const messageDiv = document.getElementById('wordcloud-message');
-            if (messageDiv) {
-                messageDiv.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">📝</div>
-                        <h3>No words yet!</h3>
-                        <p>Be the first to add a word to this poll.</p>
-                    </div>
-                `;
-            }
-            return;
-        }
-        
-        const width = container.clientWidth;
-        const height = 500;
-        
-        const wordData = wordsData.map(word => ({
-            text: word.word_text,
-            size: 20 + (word.vote_count * 3),
-            votes: word.vote_count
-        }));
-        
-        const layout = d3.layout.cloud()
-            .size([width, height])
-            .words(wordData)
-            .padding(8)
-            .rotate(() => Math.random() > 0.7 ? 90 : 0)
-            .font("Arial")
-            .fontSize(d => d.size)
-            .on("end", draw);
-        
-        layout.start();
-        
-        function draw(words) {
-            d3.select("#wordcloud-svg")
-                .attr("width", width)
-                .attr("height", height)
-                .append("g")
-                .attr("transform", `translate(${width/2},${height/2})`)
-                .selectAll("text")
-                .data(words)
-                .enter().append("text")
-                .style("font-size", d => `${d.size}px`)
-                .style("font-family", "Arial")
-                .style("fill", () => {
-                    const colors = ["#667eea", "#764ba2", "#f56565", "#ed8936", "#48bb78"];
-                    return colors[Math.floor(Math.random() * colors.length)];
-                })
-                .attr("text-anchor", "middle")
-                .attr("transform", d => `translate(${[d.x, d.y]})rotate(${d.rotate})`)
-                .text(d => d.text)
-                .attr("class", "wordcloud-word")
-                .on("click", function(event, d) {
-                    document.getElementById('wordInput').value = d.text;
-                    submitWord();
-                });
-        }
-    }
-    
-    // Update word count
-    function updateWordCount() {
-        const wordCountSpan = document.getElementById('wordCount');
-        if (wordCountSpan) {
-            wordCountSpan.textContent = wordsData.length;
-        }
-    }
-    
-    // Render word list
-    function renderWordList() {
-        const wordList = document.getElementById('wordList');
-        if (!wordList) return;
-        
-        wordList.innerHTML = '';
-        
-        let sortedWords = [...wordsData];
-        
-        if (currentSort === 'votes') {
-            sortedWords.sort((a, b) => b.vote_count - a.vote_count);
-        } else if (currentSort === 'alphabetical') {
-            sortedWords.sort((a, b) => a.word_text.localeCompare(b.word_text));
-        }
-        
-        sortedWords.forEach(word => {
-            const wordEl = document.createElement('div');
-            wordEl.className = 'word-tag';
-            wordEl.innerHTML = `
-                <span>${word.word_text}</span>
-                <span class="vote-count">${word.vote_count}</span>
-            `;
-            
-            wordEl.addEventListener('click', () => {
-                document.getElementById('wordInput').value = word.word_text;
+    if (wordInput) {
+        wordInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
                 submitWord();
-            });
-            
-            wordList.appendChild(wordEl);
+            }
         });
-    }
-    
-    // Auto-refresh
-    function startAutoRefresh() {
-        if (refreshInterval) {
-            clearInterval(refreshInterval);
+        
+        if (submitBtn) {
+            submitBtn.addEventListener('click', submitWord);
         }
-        
-        refreshInterval = setInterval(() => {
-            fetchWords();
-        }, 25000);
     }
     
-    // Update admin stats
-    function updateAdminStats() {
-        const totalVotes = wordsData.reduce((sum, word) => sum + word.vote_count, 0);
-        const totalWords = wordsData.length;
-        const avgVotes = totalWords > 0 ? (totalVotes / totalWords).toFixed(1) : 0;
-        const topWord = wordsData.length > 0 ? wordsData[0].word_text : '-';
+    // Sort buttons
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentSort = this.dataset.sort;
+            renderWordList();
+        });
+    });
+}
+
+// Fetch words from API
+async function fetchWords() {
+    try {
+        const response = await fetch(`api/get-words.php?poll_id=${currentPollId}`);
+        const result = await response.json();
         
-        document.getElementById('totalWords').textContent = totalWords;
-        document.getElementById('totalVotes').textContent = totalVotes;
-        document.getElementById('topWord').textContent = topWord;
-        document.getElementById('avgVotes').textContent = avgVotes;
-    }
-    
-    // Admin functions
-    function exportPollData() {
-        if (!adminToken) {
-            showError('Admin token not found');
-            return;
+        if (result.success) {
+            wordsData = result.words || [];
+            updateWordCount();
+            renderWordCloud();
+            renderWordList();
+            
+            if (isAdmin) {
+                updateAdminStats();
+            }
         }
-        
-        window.open(`api/export-poll.php?poll_id=${currentPollId}&token=${adminToken}`, '_blank');
+    } catch (error) {
+        console.error('Error fetching words:', error);
+    }
+}
+
+// Submit word
+async function submitWord() {
+    const wordInput = document.getElementById('wordInput');
+    const word = wordInput.value.trim().toLowerCase();
+    
+    if (!word) {
+        showError('Please enter a word');
+        return;
     }
     
-    function deletePoll() {
-        if (!confirm('Are you sure? This will permanently delete the poll and all its data!')) {
-            return;
-        }
-        
+    if (word.length > 50) {
+        showError('Word is too long (max 50 characters)');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9\s\-]+$/.test(word)) {
+        showError('Only letters, numbers, spaces and hyphens allowed');
+        return;
+    }
+    
+    try {
         const formData = new FormData();
         formData.append('poll_id', currentPollId);
-        formData.append('token', adminToken);
+        formData.append('word', word);
         
-        fetch('api/delete-poll.php', {
+        const response = await fetch('api/submit-word.php', {
             method: 'POST',
             body: formData
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                alert('Poll deleted successfully!');
-                window.location.href = 'index.php';
-            } else {
-                showError(result.message || 'Failed to delete poll');
-            }
-        })
-        .catch(error => {
-            showError('Network error');
         });
-    }
-    
-    // Share functions
-    function sharePoll() {
-        const url = window.location.href.split('?')[0] + `?id=${currentPollId}`;
         
-        if (navigator.share) {
-            navigator.share({
-                title: document.getElementById('pollQuestion').textContent,
-                text: 'Check out this word cloud poll!',
-                url: url
-            });
+        const result = await response.json();
+        
+        if (result.success) {
+            showSuccess(result.message || 'Word submitted!');
+            wordInput.value = '';
+            await fetchWords();
         } else {
-            copyToClipboardInput(url, 'Poll link copied to clipboard!');
+            showError(result.message || 'Failed to submit word');
         }
+    } catch (error) {
+        showError('Network error. Please try again.');
+    }
+}
+
+// Render word cloud
+function renderWordCloud() {
+    const container = document.getElementById('wordcloud-svg');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (wordsData.length === 0) {
+        const messageDiv = document.getElementById('wordcloud-message');
+        if (messageDiv) {
+            messageDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📝</div>
+                    <h3>No words yet!</h3>
+                    <p>Be the first to add a word to this poll.</p>
+                </div>
+            `;
+        }
+        return;
     }
     
-    function copyPollLink() {
-        const url = window.location.href.split('?')[0] + `?id=${currentPollId}`;
+    const width = container.clientWidth;
+    const height = 500;
+    
+    const wordData = wordsData.map(word => ({
+        text: word.word_text,
+        size: 20 + (word.vote_count * 3),
+        votes: word.vote_count
+    }));
+    
+    const layout = d3.layout.cloud()
+        .size([width, height])
+        .words(wordData)
+        .padding(8)
+        .rotate(() => Math.random() > 0.7 ? 90 : 0)
+        .font("Arial")
+        .fontSize(d => d.size)
+        .on("end", draw);
+    
+    layout.start();
+    
+    function draw(words) {
+        d3.select("#wordcloud-svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", `translate(${width/2},${height/2})`)
+            .selectAll("text")
+            .data(words)
+            .enter().append("text")
+            .style("font-size", d => `${d.size}px`)
+            .style("font-family", "Arial")
+            .style("fill", () => {
+                const colors = ["#667eea", "#764ba2", "#f56565", "#ed8936", "#48bb78"];
+                return colors[Math.floor(Math.random() * colors.length)];
+            })
+            .attr("text-anchor", "middle")
+            .attr("transform", d => `translate(${[d.x, d.y]})rotate(${d.rotate})`)
+            .text(d => d.text)
+            .attr("class", "wordcloud-word")
+            .on("click", function(event, d) {
+                document.getElementById('wordInput').value = d.text;
+                submitWord();
+            });
+    }
+}
+
+// Update word count
+function updateWordCount() {
+    const wordCountSpan = document.getElementById('wordCount');
+    if (wordCountSpan) {
+        wordCountSpan.textContent = wordsData.length;
+    }
+}
+
+// Render word list
+function renderWordList() {
+    const wordList = document.getElementById('wordList');
+    if (!wordList) return;
+    
+    wordList.innerHTML = '';
+    
+    let sortedWords = [...wordsData];
+    
+    if (currentSort === 'votes') {
+        sortedWords.sort((a, b) => b.vote_count - a.vote_count);
+    } else if (currentSort === 'alphabetical') {
+        sortedWords.sort((a, b) => a.word_text.localeCompare(b.word_text));
+    }
+    
+    sortedWords.forEach(word => {
+        const wordEl = document.createElement('div');
+        wordEl.className = 'word-tag';
+        wordEl.innerHTML = `
+            <span>${word.word_text}</span>
+            <span class="vote-count">${word.vote_count}</span>
+        `;
+        
+        wordEl.addEventListener('click', () => {
+            document.getElementById('wordInput').value = word.word_text;
+            submitWord();
+        });
+        
+        wordList.appendChild(wordEl);
+    });
+} // ← This closing brace was probably missing
+
+// Update admin stats
+function updateAdminStats() {
+    const totalVotes = wordsData.reduce((sum, word) => sum + word.vote_count, 0);
+    const totalWords = wordsData.length;
+    const avgVotes = totalWords > 0 ? (totalVotes / totalWords).toFixed(1) : 0;
+    const topWord = wordsData.length > 0 ? wordsData[0].word_text : '-';
+    
+    document.getElementById('totalWords').textContent = totalWords;
+    document.getElementById('totalVotes').textContent = totalVotes;
+    document.getElementById('topWord').textContent = topWord;
+    document.getElementById('avgVotes').textContent = avgVotes;
+}
+
+// Admin functions
+function exportPollData() {
+    if (!adminToken) {
+        showError('Admin token not found');
+        return;
+    }
+    
+    window.open(`api/export-poll.php?poll_id=${currentPollId}&token=${adminToken}`, '_blank');
+}
+
+function deletePoll() {
+    if (!confirm('Are you sure? This will permanently delete the poll and all its data!')) {
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('poll_id', currentPollId);
+    formData.append('token', adminToken);
+    
+    fetch('api/delete-poll.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            alert('Poll deleted successfully!');
+            window.location.href = 'index.php';
+        } else {
+            showError(result.message || 'Failed to delete poll');
+        }
+    })
+    .catch(error => {
+        showError('Network error');
+    });
+}
+
+// Share functions
+function sharePoll() {
+    const url = window.location.href.split('?')[0] + `?id=${currentPollId}`;
+    
+    if (navigator.share) {
+        navigator.share({
+            title: document.getElementById('pollQuestion').textContent,
+            text: 'Check out this word cloud poll!',
+            url: url
+        });
+    } else {
         copyToClipboardInput(url, 'Poll link copied to clipboard!');
     }
-    
-    function copyToClipboardInput(text, successMessage) {
-        const tempInput = document.createElement('input');
-        tempInput.value = text;
-        document.body.appendChild(tempInput);
-        tempInput.select();
-        document.execCommand('copy');
-        document.body.removeChild(tempInput);
-        showSuccess(successMessage);
+}
+
+function copyPollLink() {
+    const url = window.location.href.split('?')[0] + `?id=${currentPollId}`;
+    copyToClipboardInput(url, 'Poll link copied to clipboard!');
+}
+
+function copyToClipboardInput(text, successMessage) {
+    const tempInput = document.createElement('input');
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempInput);
+    showSuccess(successMessage);
+}
+
+// Load admin stats
+function loadAdminStats() {
+    fetch(`api/get-poll.php?poll_id=${currentPollId}&stats=true`)
+        .then(response => response.json())
+        .then(result => {
+            if (result.success && result.stats) {
+                updateAdminStats();
+            }
+        });
+}
+
+// Show error message
+function showError(message) {
+    const el = document.getElementById('errorMessage');
+    if (el) {
+        el.textContent = message;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 5000);
     }
-    
-    // Load admin stats
-    function loadAdminStats() {
-        fetch(`api/get-poll.php?poll_id=${currentPollId}&stats=true`)
-            .then(response => response.json())
-            .then(result => {
-                if (result.success && result.stats) {
-                    updateAdminStats();
-                }
-            });
+}
+
+// Show success message
+function showSuccess(message) {
+    const el = document.getElementById('successMessage');
+    if (el) {
+        el.textContent = message;
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 3000);
     }
-    </script>
+}
+</script>
+    
+
+
+
+
+
+
+
+
+
+
+
+
 <?php endif; ?>
 
 <?php require_once 'includes/footer.php'; ?>
